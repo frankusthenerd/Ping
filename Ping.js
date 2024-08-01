@@ -15,10 +15,12 @@ class cPing extends frankus.cNerd {
 
   /**
    * Creates a new Ping interface.
+   * @param argv Passed in command line arguments.
    */
-  constructor() {
-    super();
+  constructor(argv) {
+    super(argv);
     this.pairs = [];
+    this.Load_Data("Query");
   }
   
   On_Interpret(op, params) {
@@ -27,26 +29,25 @@ class cPing extends frankus.cNerd {
       let server = this.Get_Param(params, "Server URL not specified.");
       let content_type = this.Get_Param(params, "Content type not specified.");
       let method = this.Get_Param(params, "Method not specified.");
-      let component = this;
       this.Ping(server, content_type, method, function() {
-        component.command_ctrl.prompt();
+        console.log("Ping complete.");
       });
     }
     else if (op == "add") {
       let name = this.Get_Param(params, "Name missing.");
       let value = this.Get_Param(params, "Value missing.");
       this.pairs.push([ name, value.replace(/\\s/g, " ") ]); // Replace escaped space.
-      this.command_ctrl.prompt();
+      this.Save_Data("Query");
     }
     else if (op == "delete") {
       if (this.pairs.length > 0) {
         this.pairs.pop();
+        this.Save_Data("Query");
       }
-      this.command_ctrl.prompt();
     }
     else if (op == "clear") {
       this.pairs = [];
-      this.command_ctrl.prompt();
+      this.Save_Data("Query");
     }
     else if (op == "print") {
       let pair_count = this.pairs.length;
@@ -54,7 +55,6 @@ class cPing extends frankus.cNerd {
         let pair = this.pairs[pair_index];
         console.log(pair[0] + "=" + pair[1]);
       }
-      this.command_ctrl.prompt();
     }
     else {
       status = "error";
@@ -68,8 +68,10 @@ class cPing extends frankus.cNerd {
    * @param content_type The content-type for the output.
    * @param method The request method.
    * @param on_ouput Called when the contents of request are outputted.
+   * @throws An error if unsupported protocol is used.
    */
   Ping(server, content_type, method, on_output) {
+    frankus.Check_Condition(server.match(/^http/), "Only HTTP protocol supported.");
     let path = new url.URL(server);
     if (method == "GET") {
       http.get(server + "?" + this.Encode_Data("text"), function(response) {
@@ -133,7 +135,7 @@ class cPing extends frankus.cNerd {
       });
       request.on("error", function(error) {
         console.log(error.message);
-        on_ouput();
+        on_output();
       });
       request.write(post_data);
       request.end();
@@ -163,10 +165,40 @@ class cPing extends frankus.cNerd {
     return encoded_data;
   }
 
+  /**
+   * Loads the data from a file.
+   * @param name The name of the file to load from.
+   */
+  Load_Data(name) {
+    let file = new frankus.cFile(name + ".txt");
+    file.Read();
+    while (file.Has_More_Lines()) {
+      let line = file.Get_Line();
+      let pair = line.split(/=/);
+      if (pair.length == 2) {
+        this.pairs.push(pair);
+      }
+    }
+  }
+
+  /**
+   * Saves the data to a file.
+   * @param name The name of the file to save to.
+   */
+  Save_Data(name) {
+    let file = new frankus.cFile(name + ".txt");
+    let pair_count = this.pairs.length;
+    for (let pair_index = 0; pair_index < pair_count; pair_index++) {
+      let pair = this.pairs[pair_index];
+      file.Add(pair.join("="));
+    }
+    file.Write();
+  }
+
 }
 
 // *****************************************************************************
 // Entry Point
 // *****************************************************************************
-let ping = new cPing();
+let ping = new cPing(process.argv);
 ping.Run();
